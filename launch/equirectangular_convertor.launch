@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<launch>
+
+	<!-- equirectangular_convertor_node -->
+	<node pkg="equirectangular_convertor" type="equirectangular_convertor_node" name="equirectangular_convertor_node" output="screen" >
+		<param name="is_visualize" value="true" />
+		<param name="mode" value="0" />
+	</node>
+
+</launch>
