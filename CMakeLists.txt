@@ -40,4 +40,7 @@ add_executable(equirectangular_convertor_node
     src/equirectangular_convertor.cpp
     src/equirectangular_convertor_node.cpp
 )
-target_link_libraries(equirectangular_convertor_node ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
+target_link_libraries(equirectangular_convertor_node
+    ${catkin_LIBRARIES}
+    ${OpenCV_LIBRARIES}
+)
