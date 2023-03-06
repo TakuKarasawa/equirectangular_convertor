@@ -1,18 +1,21 @@
 #include "equirectangular_convertor/equirectangular_convertor.h"
 
-EquirectangularConvertor::EquirectangularConvertor() : private_nh_("~")
+EquirectangularConvertor::EquirectangularConvertor() : 
+    private_nh_("~"),
+    cols_(0), rows_(0), shift_(0),
+    map_x_(cv::Mat()), map_y_(cv::Mat()), prev_(cv::Mat())
 {
-    private_nh_.param("dual_topic_name",dual_topic_name_,{"/theta_s/image_raw"});
-    private_nh_.param("equi_topic_name",equi_topic_name_,{"/output_image"});
-    private_nh_.param("is_visualize",is_visualize_,{true});
-    private_nh_.param("mode",mode_,{0});
+    img_sub_ = nh_.subscribe("img_in",1,&EquirectangularConvertor::image_callback,this);
+    img_pub_ = nh_.advertise<sensor_msgs::Image>("img_out",1);
 
-    dual_sub_ = nh_.subscribe(dual_topic_name_,10,&EquirectangularConvertor::image_callback,this);
-    equi_pub_ = nh_.advertise<sensor_msgs::Image>(equi_topic_name_,10);
+    std::string mode;
+    private_nh_.param("MODE",mode,{std::string("equidistance")});
+    set_projection_mode(mode);
 
-    if(is_visualize_){
-        cv::namedWindow(DUAL_WINDOW_);
-        cv::namedWindow(EQUI_WINDOW_);
+    private_nh_.param("IS_VISUALIZE",IS_VISUALIZE_,{false});
+    if(IS_VISUALIZE_){
+        cv::namedWindow(INPUT_IMG_WINDOW_);
+        cv::namedWindow(OUTPUT_IMG_WINDOW_);
     }
 }
 
@@ -29,10 +32,7 @@ void EquirectangularConvertor::image_callback(const sensor_msgs::ImageConstPtr& 
         return;
     }
 
-    if(is_visualize_) display_image(DUAL_WINDOW_,cv_ptr->image);
-
     cv::Mat cv_img(cv_ptr->image.rows,cv_ptr->image.cols,cv_ptr->image.type());
-    cv::Mat converted_img(cv_ptr->image.rows,cv_ptr->image.cols,cv_ptr->image.type());
     cv_img = cv_ptr->image;
     set_parameter(cv_ptr->image.cols,cv_ptr->image.rows);
     convert_image(cv_img);
@@ -41,6 +41,7 @@ void EquirectangularConvertor::image_callback(const sensor_msgs::ImageConstPtr& 
     cv_img = cv_img(rect);
 
     // TO DO
+    cv::Mat converted_img(cv_ptr->image.rows,cv_ptr->image.cols,cv_ptr->image.type());
     cv::Mat black_img = cv::Mat::zeros(cv::Size(cols_,80),CV_8UC3);
     cv::Mat top_img(converted_img,cv::Rect(cv::Point(0,0),cv::Size(cv_img.cols,cv_img.rows)));
     cv::Mat bottom_img(converted_img,cv::Rect(cv::Point(0,640),cv::Size(black_img.cols,black_img.rows)));
@@ -49,10 +50,29 @@ void EquirectangularConvertor::image_callback(const sensor_msgs::ImageConstPtr& 
 
     sensor_msgs::ImagePtr img_msg = cv_bridge::CvImage(std_msgs::Header(),"bgr8",converted_img).toImageMsg();
     img_msg->header = msg->header;
-    equi_pub_.publish(img_msg);
+    img_pub_.publish(img_msg);
 
-    if(is_visualize_) display_image(EQUI_WINDOW_,converted_img);
+    if(IS_VISUALIZE_){
+        display_image(INPUT_IMG_WINDOW_,cv_ptr->image);
+        display_image(OUTPUT_IMG_WINDOW_,converted_img);
+    }
 }
+
+void EquirectangularConvertor::set_projection_mode(std::string mode)
+{
+    if(mode == "equidistance") projection_mode_ = ProjectionMode::Equidistance;
+    else if(mode == "stereographic") projection_mode_ = ProjectionMode::Stereographic;
+    else if(mode == "inverse_stereographic") projection_mode_ = ProjectionMode::InverseStereographic;
+    else if(mode == "orthographic") projection_mode_ = ProjectionMode::Orthographic;
+    else if(mode == "inverse_orthographic") projection_mode_ = ProjectionMode::InverseOrthographic;
+    else{
+        ROS_WARN("No applicable 'projection_mode'.");
+        ROS_WARN("Please select ['equidistance', 'stereographic', 'inverse_stereographic', 'orthographic', 'inverse_orthographic']");
+        ROS_INFO("Set 'equidistance'");
+        projection_mode_ = ProjectionMode::Equidistance;
+    }
+}
+
 
 void EquirectangularConvertor::set_parameter(int cols,int rows)
 {
@@ -89,29 +109,20 @@ void EquirectangularConvertor::make_map()
 
             float r0;
             if(phi2 < M_PI/2){
-                if(mode_ == 0) r0 = phi2/(M_PI/2);
-                else if(mode_ == 1) r0 = std::tan(phi2/2);
-                else if(mode_ == 2) r0 = 1 - std::tan((M_PI/2 - phi2)/2);
-                else if(mode_ == 3) r0 = std::sin(phi2);
-                else if(mode_ == 4) r0 = 1 - std::sin(M_PI/2 - phi2);
-                else{
-                    std::cout << "invalid mode" << std::endl;
-                    return;
-                }
+                if(projection_mode_ == ProjectionMode::Equidistance) r0 = phi2/(M_PI/2);
+                else if(projection_mode_ == ProjectionMode::Stereographic) r0 = std::tan(phi2/2);
+                else if(projection_mode_ == ProjectionMode::InverseStereographic) r0 = 1 - std::tan((M_PI/2 - phi2)/2);
+                else if(projection_mode_ == ProjectionMode::Orthographic) r0 = std::sin(phi2);
+                else if(projection_mode_ == ProjectionMode::InverseOrthographic) r0 = 1 - std::sin(M_PI/2 - phi2);
                 map_x_.at<float>(y,x) = src_rx*r0*std::cos(M_PI - theta2) + src_cx2;
                 map_y_.at<float>(y,x) = src_ry*r0*std::sin(M_PI - theta2) + src_cy1;
             }
             else{
-                if(mode_ == 0) r0 = (M_PI - phi2)/(M_PI/2);
-                else if(mode_ == 1) r0 = std::tan((M_PI - phi2)/2);
-                else if(mode_ == 2) r0 = 1 - std::tan((-M_PI/2 + phi2)/2);
-                else if(mode_ == 3) r0 = std::cos(M_PI - phi2);
-                else if(mode_ == 4) r0 = 1 - std::sin(-M_PI/2 + phi2);
-                else{
-                    std::cout << "invalid mode" << std::endl;
-                    return;
-                }
-
+                if(projection_mode_ == ProjectionMode::Equidistance) r0 = (M_PI - phi2)/(M_PI/2);
+                else if(projection_mode_ == ProjectionMode::Stereographic) r0 = std::tan((M_PI - phi2)/2);
+                else if(projection_mode_ == ProjectionMode::InverseStereographic) r0 = 1 - std::tan((-M_PI/2 + phi2)/2);
+                else if(projection_mode_ == ProjectionMode::Orthographic) r0 = std::cos(M_PI - phi2);
+                else if(projection_mode_ == ProjectionMode::InverseOrthographic) r0 = 1 - std::sin(-M_PI/2 + phi2);
                 map_x_.at<float>(y,x) = src_rx*r0*std::cos(theta2) + src_cx1;
                 map_y_.at<float>(y,x) = src_ry*r0*std::sin(theta2) + src_cy1;
             }

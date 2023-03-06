@@ -1,10 +1,17 @@
 <?xml version="1.0"?>
 <launch>
+    <arg name="is_visualize" default="false" />
 
-	<!-- equirectangular_convertor_node -->
-	<node pkg="equirectangular_convertor" type="equirectangular_convertor_node" name="equirectangular_convertor_node" output="screen" >
-		<param name="is_visualize" value="true" />
-		<param name="mode" value="0" />
-	</node>
+    <!-- equirectangular_convertor_node -->
+    <node pkg="equirectangular_convertor" type="equirectangular_convertor_node" name="equirectangular_convertor_node" output="screen" >
+        <!-- remap -->
+        <remap from="img_in"  to="/theta_s/image_raw" />
+        <remap from="img_out" to="/output_image" />
+
+        <!-- params -->
+        <param name="IS_VISUALIZE" value="$(arg is_visualize)" />
+        <param name="MODE"         value="equidistanceu" />
+		<!-- <param name="MODE"         value="stereographic" /> -->
+    </node>
 
 </launch>

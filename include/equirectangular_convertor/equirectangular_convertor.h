@@ -4,10 +4,14 @@
 #include <ros/ros.h>
 #include <sensor_msgs/Image.h>
 #include <cv_bridge/cv_bridge.h>
+
+// opencv2
 #include <opencv2/opencv.hpp>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
+
+#include "equirectangular_convertor/projection_mode.h"
 
 class EquirectangularConvertor
 {
@@ -18,6 +22,8 @@ public:
 
 private:
     void image_callback(const sensor_msgs::ImageConstPtr& msg);
+    
+    void set_projection_mode(std::string mode);
     void set_parameter(int cols,int rows);
     void make_map();
     void convert_image(cv::Mat& img);
@@ -26,33 +32,29 @@ private:
     void display_image(std::string window_name,cv::Mat& img);
     int calc_rotation(cv::Mat& img);
 
+    // node handler
     ros::NodeHandle nh_;
     ros::NodeHandle private_nh_;
-    ros::Subscriber dual_sub_;
-    ros::Publisher equi_pub_;
 
-    std::string DUAL_WINDOW_ = "Dualfisheye Image";
-    std::string EQUI_WINDOW_ = "Equirectangular Image";
+    // subscriber
+    ros::Subscriber img_sub_;
 
-    std::string dual_topic_name_;
-    std::string equi_topic_name_;
-    bool is_visualize_;
-    int mode_;
+    // publisher
+    ros::Publisher img_pub_;
 
-    // ---------- mode ----------
-    // 0: 等距離射影
-    // 1: 立体射影
-    // 2: 立体射影逆変換
-    // 3: 正射影
-    // 4: 正射影逆変換
-    // --------------------------
-
+    // buffer
     int cols_;
     int rows_;
     int shift_;
     cv::Mat map_x_;
     cv::Mat map_y_;
     cv::Mat prev_;
+
+    // params
+    const std::string INPUT_IMG_WINDOW_ = "Dualfisheye Image";
+    const std::string OUTPUT_IMG_WINDOW_ = "Equirectangular Image";
+    bool IS_VISUALIZE_;
+    ProjectionMode projection_mode_;
 };
 
 #endif  // EQUIRECTANGULAR_CONVERTOR_H_
